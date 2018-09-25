@@ -61,6 +61,23 @@ public class WalletTest {
         assertThat(Wallet.generateRandomBytes(10).length, is(10));
     }
 
+    @Test
+    public void testVariousLength() throws Exception {
+        final String entropyStr = SampleKeys.PRIVATE_KEY_STRING.substring(0, 32);
+        byte[] entropy = Numeric.hexStringToByteArray(entropyStr);
+        assertThat(entropy.length, is(16));
+        WalletFile walletFile = Wallet.createStandard(PASSWORD, entropy, "test");
+        byte[] out = Wallet.decryptRaw(PASSWORD, walletFile);
+        assertThat(out, is(entropy));
+
+        final String seedStr = SampleKeys.PRIVATE_KEY_STRING + SampleKeys.PRIVATE_KEY_STRING;
+        byte[] seed = Numeric.hexStringToByteArray(seedStr);
+        assertThat(seed.length, is(64));
+        walletFile = Wallet.createStandard(PASSWORD, seed, "test");
+        out = Wallet.decryptRaw(PASSWORD, walletFile);
+        assertThat(out, is(seed));
+    }
+
     private WalletFile load(String source) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.readValue(source, WalletFile.class);

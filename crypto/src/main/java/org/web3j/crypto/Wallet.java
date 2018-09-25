@@ -68,6 +68,19 @@ public class Wallet {
 
     public static WalletFile create(String password, ECKeyPair ecKeyPair, int n, int p)
             throws CipherException {
+        byte[] privateKeyBytes =
+                Numeric.toBytesPadded(ecKeyPair.getPrivateKey(), Keys.PRIVATE_KEY_SIZE);
+        String address = Keys.getAddress(ecKeyPair);
+
+        return create(password, privateKeyBytes, address, n, p);
+    }
+
+    public static WalletFile create(String password, byte[] text, String address, int n, int p)
+            throws CipherException {
+        if (text.length % 16 != 0) {
+            // clear text must be 128bit blocks for aes-128 with no length info provided
+            throw new CipherException("Unsupported text len:" + text.length);
+        }
 
         byte[] salt = generateRandomBytes(32);
 
@@ -77,15 +90,12 @@ public class Wallet {
         byte[] encryptKey = Arrays.copyOfRange(derivedKey, 0, 16);
         byte[] iv = generateRandomBytes(16);
 
-        byte[] privateKeyBytes =
-                Numeric.toBytesPadded(ecKeyPair.getPrivateKey(), Keys.PRIVATE_KEY_SIZE);
-
         byte[] cipherText = performCipherOperation(
-                    Cipher.ENCRYPT_MODE, iv, encryptKey, privateKeyBytes);
+                    Cipher.ENCRYPT_MODE, iv, encryptKey, text);
 
         byte[] mac = generateMac(derivedKey, cipherText);
 
-        return createWalletFile(ecKeyPair, cipherText, iv, salt, mac, n, p);
+        return createWalletFile(address, cipherText, iv, salt, mac, n, p);
     }
 
     public static WalletFile createStandard(String password, ECKeyPair ecKeyPair)
@@ -98,12 +108,22 @@ public class Wallet {
         return create(password, ecKeyPair, N_LIGHT, P_LIGHT);
     }
 
+    public static WalletFile createStandard(String password, byte[] text, String address)
+            throws CipherException {
+        return create(password, text, address, N_STANDARD, P_STANDARD);
+    }
+
+    public static WalletFile createLight(String password, byte[] text, String address)
+            throws CipherException {
+        return create(password, text, address, N_LIGHT, P_LIGHT);
+    }
+
     private static WalletFile createWalletFile(
-            ECKeyPair ecKeyPair, byte[] cipherText, byte[] iv, byte[] salt, byte[] mac,
+            String address, byte[] cipherText, byte[] iv, byte[] salt, byte[] mac,
             int n, int p) {
 
         WalletFile walletFile = new WalletFile();
-        walletFile.setAddress(Keys.getAddress(ecKeyPair));
+        walletFile.setAddress(address);
 
         WalletFile.Crypto crypto = new WalletFile.Crypto();
         crypto.setCipher(CIPHER);
@@ -191,6 +211,12 @@ public class Wallet {
 
     public static ECKeyPair decrypt(String password, WalletFile walletFile)
             throws CipherException {
+        byte[] privateKey = decryptRaw(password, walletFile);
+        return ECKeyPair.create(privateKey);
+    }
+
+    public static byte[] decryptRaw(String password, WalletFile walletFile)
+            throws CipherException {
 
         validate(walletFile);
 
@@ -234,7 +260,7 @@ public class Wallet {
 
         byte[] encryptKey = Arrays.copyOfRange(derivedKey, 0, 16);
         byte[] privateKey = performCipherOperation(Cipher.DECRYPT_MODE, iv, encryptKey, cipherText);
-        return ECKeyPair.create(privateKey);
+        return privateKey;
     }
 
     static void validate(WalletFile walletFile) throws CipherException {
